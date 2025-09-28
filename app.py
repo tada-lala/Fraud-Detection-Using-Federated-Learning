@@ -22,14 +22,14 @@ df = pd.read_csv(DATA_PATH)
 # Create pairplot for selected features
 def create_pairplot():
     cols = ['V1', 'V2', 'V3', 'Amount', 'Class']
-    sns.pairplot(df[cols].sample(500, random_state=42), hue='Class', corner=True, plot_kws={'alpha':0.6})
+    sns.pairplot(df[cols].sample(100, random_state=42), hue='Class', corner=True, plot_kws={'alpha':0.6})
     os.makedirs('static', exist_ok=True)
     plt.savefig(PAIRPLOT_PATH)
     plt.close()
 
 # Create correlation heatmap for all features
 def create_correlation_heatmap():
-    cols = [f'V{i}' for i in range(1, 29)] + ['Amount']
+    cols = [f'V{i}' for i in range(1, 15)] + ['Amount']
     corr = df[cols].corr()
 
     plt.figure(figsize=(12, 10))
