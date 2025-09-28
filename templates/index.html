@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>✨ Federated Fraud Detection Prototype</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+<style>
+  body {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: #fff;
+    min-height: 100vh;
+  }
+  .card {
+    background: rgba(255 255 255 / 0.1);
+    backdrop-filter: blur(15px);
+    border-radius: 20px;
+  }
+  .form-control, button {
+    border-radius: 12px;
+  }
+  .btn-primary {
+    background: #3b82f6;
+    border: none;
+  }
+  .btn-primary:hover {
+    background: #2563eb;
+  }
+  .risk-label {
+    font-weight: bold;
+    font-size: 1.5rem;
+  }
+  .risk-label.Minimal {
+    color: #4ade80;
+  }
+  .risk-label.Low {
+    color: #facc15;
+  }
+  .risk-label.Medium {
+    color: #f97316;
+  }
+  .risk-label.High {
+    color: #ef4444;
+  }
+  .risk-label.Critical {
+    color: #b91c1c;
+  }
+  label {
+    color: #e0e0e0;
+  }
+</style>
+</head>
+<body>
+<div class="container py-5">
+  <h1 class="mb-4 text-center">✨ Fraud Detection Prototype using Federated Learning</h1>
+  <p class="text-center mb-5">This prototype demonstrates model behavior and exploratory analytics on transaction features to predict fraud risk.</p>
+  
+  <div class="row">
+    <!-- Analytics Plot Left -->
+    <div class="col-md-6 mb-4">
+      <img src="{{ plot_url }}" alt="Feature Pairplot Analytics" style="width:100%; border-radius:10px; box-shadow: 0 0 15px rgba(0,0,0,0.4);" />
+      <hr style="border-color: rgba(255, 255, 255, 0.2); margin: 1.5rem 0;">
+      <img src="{{ heatmap_url }}" alt="Feature Correlation Heatmap" style="width:100%; border-radius:10px; box-shadow: 0 0 15px rgba(0,0,0,0.4);" />
+    </div>
+    
+    <!-- Prediction Form Right -->
+    <div class="col-md-6">
+      <div class="card p-4">
+        <form id="fraudForm" class="row g-3">
+          {% for feat in features %}
+          <div class="col-6 col-md-6">
+            <label for="{{ feat }}" class="form-label">{{ feat }}</label>
+            <input
+              type="number"
+              step="any"
+              id="{{ feat }}"
+              name="{{ feat }}"
+              class="form-control"
+              value="{{ prefill[feat] if prefill and feat in prefill else '0.0' }}"
+              required
+            >
+          </div>
+          {% endfor %}
+          <div class="col-12 text-center mt-4">
+            <button type="submit" class="btn btn-primary px-5">Predict Fraud</button>
+          </div>
+        </form>
+        
+        <div id="results" class="mt-5 text-center" style="display:none;">
+          <h2>Prediction Result</h2>
+          <p class="risk-label" id="riskLevel"></p>
+          <p>Fraud Probability: <span id="prob"></span></p>
+          <p>Confidence: <span id="confidence"></span></p>
+          <p>Processing time: <span id="procTime"></span> ms</p>
+          <div id="riskFactors" style="margin-top: 1em; color: #ddd;"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+<script>
+  const form = document.getElementById('fraudForm');
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const data = {};
+    {% for feat in features %}
+      data['{{ feat }}'] = parseFloat(document.getElementById('{{ feat }}').value);
+    {% endfor %}
+    
+    try {
+      const res = await axios.post('/predict', data);
+      const d = res.data;
+      document.getElementById('results').style.display = 'block';
+      const riskLevelEl = document.getElementById('riskLevel');
+      riskLevelEl.textContent = d.risk_level;
+      riskLevelEl.className = 'risk-label ' + d.risk_level;
+      document.getElementById('prob').textContent = (d.fraud_probability * 100).toFixed(2) + '%';
+      document.getElementById('confidence').textContent = (d.confidence * 100).toFixed(2) + '%';
+      document.getElementById('procTime').textContent = d.processing_time;
+
+      const riskFactorsDiv = document.getElementById('riskFactors');
+      riskFactorsDiv.innerHTML = '<strong>Risk Factors:</strong><ul style="list-style:none; padding-left:0;">' +
+        Object.entries(d.risk_factors).map(([k,v]) =>
+            `<li>${v.description}: ${(v.score*100).toFixed(2)}%</li>`
+          ).join('') + '</ul>';
+
+    } catch(e) {
+      alert('Error: ' + (e.response?.data?.message || e.message));
+    }
+  });
+</script>
+</body>
+</html>
