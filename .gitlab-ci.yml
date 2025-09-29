@@ -3,7 +3,12 @@ stages:
   - deploy
 
 variables:
+  DOCKER_IMAGE: "$CI_REGISTRY_IMAGE/my-flask-app"
   IMAGE: $CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA
+
+
+before_script:
+  - echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
 
 build-image:
   stage: build
