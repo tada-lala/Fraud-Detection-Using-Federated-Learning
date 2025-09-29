@@ -1,38 +1,27 @@
-image: docker:latest
-
-services:
-  - docker:dind
-
-variables:
-  DOCKER_DRIVER: overlay2
-  IMAGE_NAME: your-dockerhub-username/federated-fraud-detection:$CI_COMMIT_SHA
-
 stages:
   - build
   - deploy
 
-before_script:
-  - apk add --no-cache git       # install git in docker image
+variables:
+  IMAGE: $CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA
 
-build:
+build-image:
   stage: build
-  tags:
-    - docker
-    - ubuntu
+  image: docker:24.0.5
+  services:
+    - docker:24.0.5-dind
   script:
-    - git clone https://github.com/tada-lala/Fraud-Detection-Using-Federated-Learning.git
-    - cd Fraud-Detection-Using-Federated-Learning
-    - docker build -t $IMAGE_NAME .
-    - echo "$DOCKERHUB_PASSWORD" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
-    - docker push $IMAGE_NAME
+    - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin $CI_REGISTRY
+    - docker build -t $IMAGE .
+    - docker push $IMAGE
 
 deploy:
   stage: deploy
-  tags:
-    - docker
-    - ubuntu
+  image: alpine:latest
+  before_script:
+    - apk add --no-cache openssh
   script:
-    - docker pull $IMAGE_NAME
-    - docker stop federated-fraud-app || true
-    - docker rm federated-fraud-app || true
-    - docker run -d --name federated-fraud-app -p 5000:5000 $IMAGE_NAME
+    - chmod 600 $EC2_SSH_KEY
+    - ssh -o StrictHostKeyChecking=no -i $EC2_SSH_KEY ubuntu@$EC2_PUBLIC_IP "./deploy.sh $IMAGE"
+  only:
+    - main
