@@ -23,3 +23,7 @@ WORKDIR /opt
 ENTRYPOINT ["python", "app.py"]
 
 
+ENTRYPOINT [ "python"]
+CMD ["app.py"]
+
+
