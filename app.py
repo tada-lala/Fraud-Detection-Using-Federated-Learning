@@ -1,4 +1,7 @@
+# put this at the very top of app.py
 import os
+os.environ.setdefault("MPLBACKEND", "Agg")   # headless matplotlib backend for Docker
+
 import uuid
 import time
 import pandas as pd
@@ -158,4 +161,5 @@ def predict():
 
 if __name__ == "__main__":
     os.makedirs('static', exist_ok=True)
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    port = int(os.environ.get("PORT", 8000))
+    app.run(host="0.0.0.0", port=port, debug=False)
