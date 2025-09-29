@@ -1,20 +1,29 @@
-# Use an official Python image
+# Dockerfile
 FROM python:3.11-slim
 
-# Set working directory
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+ENV MPLBACKEND=Agg
+
 WORKDIR /app
 
-# Copy requirements first (better caching)
+# system deps for compiling some python packages (keeps image small-ish)
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+    build-essential libfreetype6-dev libpng-dev pkg-config \
+ && rm -rf /var/lib/apt/lists/*
+
+# install python deps
 COPY requirements.txt .
+RUN pip install --upgrade pip \
+ && pip install --no-cache-dir -r requirements.txt
 
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Copy rest of the code
+# copy app code and data
 COPY . .
 
-# Expose port
 EXPOSE 8000
 
-# Run Gunicorn
-CMD ["gunicorn", "--bind", "0.0.0.0:8000", "app:app"]
+# run gunicorn (app:app must match your Flask file)
+CMD ["gunicorn", "--workers", "3", "--bind", "0.0.0.0:8000", "app:app"]
+
 
