@@ -1,6 +1,6 @@
-# put this at the very top of app.py
+# app.py
 import os
-os.environ.setdefault("MPLBACKEND", "Agg")   # headless matplotlib backend for Docker
+os.environ.setdefault("MPLBACKEND", "Agg")  # Headless matplotlib for Docker
 
 import uuid
 import time
@@ -9,7 +9,6 @@ import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
 from flask import Flask, render_template, request, jsonify
-
 import joblib
 
 app = Flask(__name__)
@@ -19,10 +18,9 @@ PAIRPLOT_PATH = 'static/feature_pairplot.png'
 HEATMAP_PATH = 'static/correlation_heatmap.png'
 MODEL_PATH = "models/federated_model.pickle"
 
-# Load dataset
+# Load dataset for visualization
 df = pd.read_csv(DATA_PATH)
 
-# Create pairplot for selected features
 def create_pairplot():
     cols = ['V1', 'V2', 'V3', 'Amount', 'Class']
     sns.pairplot(df[cols].sample(100, random_state=42), hue='Class', corner=True, plot_kws={'alpha':0.6})
@@ -30,11 +28,9 @@ def create_pairplot():
     plt.savefig(PAIRPLOT_PATH)
     plt.close()
 
-# Create correlation heatmap for all features
 def create_correlation_heatmap():
     cols = [f'V{i}' for i in range(1, 15)] + ['Amount']
     corr = df[cols].corr()
-
     plt.figure(figsize=(12, 10))
     sns.heatmap(corr, annot=True, fmt=".2f", cmap='coolwarm', cbar=True)
     plt.tight_layout()
@@ -45,20 +41,16 @@ create_pairplot()
 create_correlation_heatmap()
 
 FEATURES = [f"V{i}" for i in range(1, 29)] + ["Amount"]
-
-# Default form values for prediction (mostly zero + Amount=100)
 default_prefill = {feat: 0.0 for feat in FEATURES}
 default_prefill["Amount"] = 100.0
 
-# Load the trained model
+# Load trained federated model
 if os.path.exists(MODEL_PATH):
     model_bundle = joblib.load(MODEL_PATH)
     model = model_bundle
     scaler = model_bundle.get('scaler', None)
 else:
-    model = None
-    scaler = None
-
+    model, scaler = None, None
 
 def preprocess_input(data):
     features = []
@@ -74,54 +66,36 @@ def preprocess_input(data):
         X = scaler.transform(X)
     return X
 
-
 def ensemble_predict(X):
     if model is None:
-        score = (X[0, -1] / 1000) * 0.3 + np.sum(np.abs(X[0, :-1])) * 0.03
-        return max(0, min(score, 1))
+        return 0.1  # fallback dummy score
+
     models = model.get("models", {})
     weights = model.get("weights", {})
-
-    preds = []
-    total_weight = 0.0
+    preds, total_weight = [], 0.0
 
     for key, model_list in models.items():
-        if key not in weights:
-            continue
-        ws = weights[key]
-        if len(ws) != len(model_list):
-            continue
+        ws = weights.get(key, [])
         for m, w in zip(model_list, ws):
             try:
-                if hasattr(m, "predict_proba"):
-                    p = m.predict_proba(X)[:, 1]
-                else:
-                    p = m.predict(X).astype(float)
+                p = m.predict_proba(X)[:, 1] if hasattr(m, "predict_proba") else m.predict(X)
                 preds.append(p * w)
                 total_weight += w
             except Exception:
                 continue
 
     if total_weight == 0:
-        score = (X[0, -1] / 1000) * 0.3 + np.sum(np.abs(X[0, :-1])) * 0.03
-        return max(0, min(score, 1))
+        return 0.1
 
     ensemble = np.sum(preds, axis=0) / total_weight
     return ensemble[0]
 
-
 def risk_level(prob):
-    if prob > 0.8:
-        return "Critical"
-    elif prob > 0.6:
-        return "High"
-    elif prob > 0.4:
-        return "Medium"
-    elif prob > 0.2:
-        return "Low"
-    else:
-        return "Minimal"
-
+    if prob > 0.8: return "Critical"
+    if prob > 0.6: return "High"
+    if prob > 0.4: return "Medium"
+    if prob > 0.2: return "Low"
+    return "Minimal"
 
 @app.route("/", methods=["GET"])
 def home():
@@ -133,14 +107,13 @@ def home():
         heatmap_url='/' + HEATMAP_PATH,
     )
 
-
 @app.route("/predict", methods=["POST"])
 def predict():
     data = request.json
     X = preprocess_input(data)
     start = time.time()
     prob = ensemble_predict(X)
-    elapsed = (time.time() - start) * 1000  # ms
+    elapsed = (time.time() - start) * 1000
 
     response = {
         "transaction_id": uuid.uuid4().hex[:8],
@@ -157,7 +130,6 @@ def predict():
         }
     }
     return jsonify(response)
-
 
 if __name__ == "__main__":
     os.makedirs('static', exist_ok=True)
