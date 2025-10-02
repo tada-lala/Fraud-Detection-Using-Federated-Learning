@@ -1,18 +1,21 @@
+# Dockerfile
 FROM python:3.11-slim
 
-ENV PYTHONDONTWRITEBYTECODE 1
-ENV PYTHONUNBUFFERED 1
-ENV MPLBACKEND Agg
-
+# Set working directory
 WORKDIR /app
 
-# Cache dependencies
+# Copy requirements and install
 COPY requirements.txt .
-RUN pip install --upgrade pip && pip install -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application
-COPY . .
+# Copy app code and models
+COPY app.py .
+COPY models/ models/
+COPY templates/ templates/
+COPY static/ static/
 
+# Expose Flask port
 EXPOSE 8000
 
+# Run the app
 CMD ["python", "app.py"]
