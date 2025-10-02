@@ -3,59 +3,41 @@ stages:
   - deploy
 
 variables:
-  DOCKER_DRIVER: overlay2
-  DOCKER_TLS_CERTDIR: ""
-  IMAGE_NAME: ${IMAGE_NAME:-fraud-detection-app}
+  DOCKER_IMAGE: registry.gitlab.com/<your-namespace>/fraud-flask-app:latest
+  SSH_USER: <your_vm_user>
+  SSH_HOST: <your_vm_external_ip>
+  SSH_KEY: $GCP_VM_SSH_KEY  # Add your private SSH key in GitLab CI/CD variables
 
-# Build image and push to DockerHub
+# -------------- BUILD IMAGE --------------
 build:
   stage: build
-  image: docker:20.10.16
+  image: docker:24.0.5  # Docker-in-Docker
   services:
-    - name: docker:20.10.16-dind
-  variables:
-    DOCKER_TLS_CERTDIR: ""
+    - docker:24.0.5-dind
   before_script:
-    - echo "Logging into DockerHub..."
-    - echo "$DOCKERHUB_PASSWORD" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
+    - docker info
   script:
-    - docker build -t $DOCKERHUB_USERNAME/$IMAGE_NAME:$CI_COMMIT_SHORT_SHA .
-    - docker push $DOCKERHUB_USERNAME/$IMAGE_NAME:$CI_COMMIT_SHORT_SHA
-    - docker tag $DOCKERHUB_USERNAME/$IMAGE_NAME:$CI_COMMIT_SHORT_SHA $DOCKERHUB_USERNAME/$IMAGE_NAME:latest
-    - docker push $DOCKERHUB_USERNAME/$IMAGE_NAME:latest
-  only:
-    - main
+    - docker build -t $DOCKER_IMAGE .
+    - echo "$CI_JOB_TOKEN" | docker login -u gitlab-ci-token --password-stdin registry.gitlab.com
+    - docker push $DOCKER_IMAGE
 
-# Deploy by SSH-ing into GCP VM and running container
+# -------------- DEPLOY TO VM --------------
 deploy:
   stage: deploy
-  image: alpine:3.18
+  image: alpine:latest
   before_script:
     - apk add --no-cache openssh-client bash
   script:
-    # prepare SSH key
+    # Add SSH key
     - mkdir -p ~/.ssh
-    - printf "%s\n" "$GCP_SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
+    - echo "$SSH_KEY" > ~/.ssh/id_rsa
     - chmod 600 ~/.ssh/id_rsa
-    - ssh-keyscan -H "$GCP_HOST" >> ~/.ssh/known_hosts
-
-    # create a small deploy script (variables expanded by runner)
-    - cat > deploy.sh <<DEPLOY
-#!/bin/bash
-set -e
-# login to DockerHub
-echo "$DOCKERHUB_PASSWORD" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
-# pull latest image
-docker pull $DOCKERHUB_USERNAME/$IMAGE_NAME:latest
-# stop / remove old container (ignore errors)
-docker stop fraud-app || true
-docker rm fraud-app || true
-# run container (host port default 80 -> container 8000)
-docker run -d --name fraud-app -p ${HOST_PORT:-80}:8000 --restart unless-stopped $DOCKERHUB_USERNAME/$IMAGE_NAME:latest
-DEPLOY
-
-    - chmod +x deploy.sh
-    - scp -o StrictHostKeyChecking=no deploy.sh $GCP_SSH_USER@$GCP_HOST:/tmp/deploy.sh
-    - ssh -o StrictHostKeyChecking=no $GCP_SSH_USER@$GCP_HOST 'bash /tmp/deploy.sh'
+    # SSH to VM and pull & restart container
+    - ssh -o StrictHostKeyChecking=no $SSH_USER@$SSH_HOST "
+        docker pull $DOCKER_IMAGE &&
+        docker stop fraud-flask-app || true &&
+        docker rm fraud-flask-app || true &&
+        docker run -d --name fraud-flask-app -p 80:8000 $DOCKER_IMAGE
+      "
   only:
     - main
